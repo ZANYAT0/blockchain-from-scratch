@@ -3,9 +3,10 @@
 //! entered the wrong pin.
 
 use super::StateMachine;
+use crate::c1_state_machine::p3_atm::Auth::{Authenticated, Authenticating, Waiting};
 
 /// The keys on the ATM keypad
-#[derive(Hash, Debug, PartialEq, Eq, Clone)]
+#[derive(Hash, Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Key {
     One,
     Two,
@@ -58,7 +59,69 @@ impl StateMachine for Atm {
     type Transition = Action;
 
     fn next_state(starting_state: &Self::State, t: &Self::Transition) -> Self::State {
-        todo!("Exercise 4")
+        match t {
+            Action::SwipeCard(pin) => {
+                Self {
+                    cash_inside: starting_state.cash_inside,
+                    expected_pin_hash: Authenticating(*pin),
+                    keystroke_register: starting_state.keystroke_register.clone(),
+                }
+            },
+            Action::PressKey(key) => {
+                match starting_state.expected_pin_hash {
+                    Waiting => { starting_state.clone() }
+                    Authenticating(pin) => {
+                        return match key {
+                            Key::Enter => {
+                                return if crate::hash(&starting_state.keystroke_register) == pin {
+                                    Self {
+                                        cash_inside: starting_state.cash_inside,
+                                        expected_pin_hash: Authenticated,
+                                        keystroke_register: Vec::new(),
+                                    }
+                                } else {
+                                    Self {
+                                        cash_inside: starting_state.cash_inside,
+                                        expected_pin_hash: Waiting,
+                                        keystroke_register: Vec::new(),
+                                    }
+                                }
+                            }
+                            key => {
+                                let mut new_state = starting_state.clone();
+                                new_state.keystroke_register.push(key.clone());
+                                new_state
+                            }
+                        }
+                    }
+                    Authenticated => {
+                        return match key {
+                            Key::Enter => {
+                                let entered_amount = starting_state.keystroke_register.iter().cloned().fold(0, |acc, num| acc * 10 + (num as u64 + 1));
+                                return if entered_amount <= starting_state.cash_inside {
+                                    Self {
+                                        cash_inside: starting_state.cash_inside - entered_amount,
+                                        expected_pin_hash: Waiting,
+                                        keystroke_register: Vec::new(),
+                                    }
+                                } else {
+                                    Self {
+                                        cash_inside: starting_state.cash_inside,
+                                        expected_pin_hash: Waiting,
+                                        keystroke_register: Vec::new(),
+                                    }
+                                }
+                            }
+                            key => {
+                                let mut new_state = starting_state.clone();
+                                new_state.keystroke_register.push(key.clone());
+                                new_state
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
